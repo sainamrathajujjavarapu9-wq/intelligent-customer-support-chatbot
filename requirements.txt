@@ -1,6 +1,6 @@
 gradio
 transformers
-torch
+torch==2.14.0+cpu
 scikit-learn
 pandas
 numpy
