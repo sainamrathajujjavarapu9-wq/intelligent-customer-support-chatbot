@@ -1,3 +1,4 @@
+import os
 import gradio as gr
 import pandas as pd
 import numpy as np
@@ -15,70 +16,135 @@ from transformers import AutoTokenizer, AutoModel
 # Training data
 data = {
     "text": [
-        "Where is my order?", "Can you track my order?",
-        "What is my delivery status?", "When will my package arrive?",
+        "Where is my order?",
+        "Can you track my order?",
+        "What is my delivery status?",
+        "When will my package arrive?",
         "How can I track my shipment?",
 
-        "I want to cancel my order", "Please cancel my purchase",
-        "Can I cancel my order?", "I ordered something by mistake",
+        "I want to cancel my order",
+        "Please cancel my purchase",
+        "Can I cancel my order?",
+        "I ordered something by mistake",
         "How do I cancel an order?",
 
-        "I want a refund", "How can I get my money back?",
-        "I need to request a refund", "Can I get a refund for my order?",
+        "I want a refund",
+        "How can I get my money back?",
+        "I need to request a refund",
+        "Can I get a refund for my order?",
         "Please help me with a refund",
 
-        "My product is damaged", "I received a damaged item",
-        "The product I received is broken", "I got a defective product",
+        "My product is damaged",
+        "I received a damaged item",
+        "The product I received is broken",
+        "I got a defective product",
         "What should I do if my product is damaged?",
 
-        "What payment methods do you accept?", "Can I pay using UPI?",
-        "Do you accept credit cards?", "Can I pay with a debit card?",
+        "What payment methods do you accept?",
+        "Can I pay using UPI?",
+        "Do you accept credit cards?",
+        "Can I pay with a debit card?",
         "What are the available payment options?",
 
-        "I forgot my password", "How can I reset my password?",
-        "I cannot login to my account", "Help me change my password",
+        "I forgot my password",
+        "How can I reset my password?",
+        "I cannot login to my account",
+        "Help me change my password",
         "I am unable to access my account",
 
-        "Hello", "Hi", "Hey", "Good morning", "Good evening",
+        "Hello",
+        "Hi",
+        "Hey",
+        "Good morning",
+        "Good evening",
 
-        "Thank you", "Thanks for your help", "That was helpful",
-        "Thank you very much", "Thanks",
+        "Thank you",
+        "Thanks for your help",
+        "That was helpful",
+        "Thank you very much",
+        "Thanks",
 
-        "I have a problem", "I need help", "Can you help me?",
-        "I have an issue", "I need customer support"
+        "I have a problem",
+        "I need help",
+        "Can you help me?",
+        "I have an issue",
+        "I need customer support"
     ],
+
     "intent": [
-        "order_tracking", "order_tracking", "order_tracking",
-        "order_tracking", "order_tracking",
+        "order_tracking",
+        "order_tracking",
+        "order_tracking",
+        "order_tracking",
+        "order_tracking",
 
-        "cancel_order", "cancel_order", "cancel_order",
-        "cancel_order", "cancel_order",
+        "cancel_order",
+        "cancel_order",
+        "cancel_order",
+        "cancel_order",
+        "cancel_order",
 
-        "refund", "refund", "refund", "refund", "refund",
+        "refund",
+        "refund",
+        "refund",
+        "refund",
+        "refund",
 
-        "damaged_product", "damaged_product", "damaged_product",
-        "damaged_product", "damaged_product",
+        "damaged_product",
+        "damaged_product",
+        "damaged_product",
+        "damaged_product",
+        "damaged_product",
 
-        "payment", "payment", "payment", "payment", "payment",
+        "payment",
+        "payment",
+        "payment",
+        "payment",
+        "payment",
 
-        "password", "password", "password", "password", "password",
+        "password",
+        "password",
+        "password",
+        "password",
+        "password",
 
-        "greeting", "greeting", "greeting", "greeting", "greeting",
+        "greeting",
+        "greeting",
+        "greeting",
+        "greeting",
+        "greeting",
 
-        "thanks", "thanks", "thanks", "thanks", "thanks",
+        "thanks",
+        "thanks",
+        "thanks",
+        "thanks",
+        "thanks",
 
-        "general_help", "general_help", "general_help",
-        "general_help", "general_help"
+        "general_help",
+        "general_help",
+        "general_help",
+        "general_help",
+        "general_help"
     ]
 }
 
 df = pd.DataFrame(data)
 
+# ---------------------------------------------------------
 # Load pretrained Transformer
-MODEL_NAME = "distilbert-base-uncased"
+# ---------------------------------------------------------
+
+# Small Transformer model for low-memory deployment
+MODEL_NAME = "prajjwal1/bert-tiny"
+
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 model = AutoModel.from_pretrained(MODEL_NAME)
 model.eval()
+
+
+# ---------------------------------------------------------
+# Generate Transformer Embeddings
+# ---------------------------------------------------------
 
 def get_embedding(text):
     inputs = tokenizer(
@@ -87,12 +153,21 @@ def get_embedding(text):
         truncation=True,
         padding=True
     )
+
     with torch.no_grad():
         outputs = model(**inputs)
+
     return outputs.last_hidden_state.mean(dim=1).numpy()[0]
 
+
+# ---------------------------------------------------------
 # Create embeddings and train intent classifier
-X_embeddings = np.array([get_embedding(text) for text in df["text"]])
+# ---------------------------------------------------------
+
+X_embeddings = np.array([
+    get_embedding(text)
+    for text in df["text"]
+])
 
 label_encoder = LabelEncoder()
 y_encoded = label_encoder.fit_transform(df["intent"])
@@ -107,6 +182,11 @@ X_train, X_test, y_train, y_test = train_test_split(
 
 classifier = LogisticRegression(max_iter=1000)
 classifier.fit(X_train, y_train)
+
+
+# ---------------------------------------------------------
+# Chatbot Responses
+# ---------------------------------------------------------
 
 responses = {
     "order_tracking":
@@ -137,26 +217,48 @@ responses = {
         "💬 Sure! Please tell me more about the problem you are facing."
 }
 
+
+# ---------------------------------------------------------
+# Chatbot Function
+# ---------------------------------------------------------
+
 def chatbot(user_text):
+
     if not user_text or not user_text.strip():
-        return "Please type a question so I can help you.", "unknown", 0.0
+        return (
+            "Please type a question so I can help you.",
+            "unknown",
+            0.0
+        )
 
     embedding = get_embedding(user_text)
+
     prediction = classifier.predict([embedding])[0]
-    intent = label_encoder.inverse_transform([prediction])[0]
-    confidence = float(max(classifier.predict_proba([embedding])[0]))
+
+    intent = label_encoder.inverse_transform(
+        [prediction]
+    )[0]
+
+    confidence = float(
+        max(classifier.predict_proba([embedding])[0])
+    )
 
     if confidence < 0.40:
         return (
             "I'm not completely sure I understand your question. "
-            "Please explain the problem in a little more detail or contact customer support.",
+            "Please explain the problem in a little more detail "
+            "or contact customer support.",
             "unknown",
             confidence
         )
 
     return responses[intent], intent, confidence
 
-# Custom CSS for a polished responsive UI
+
+# ---------------------------------------------------------
+# Custom CSS
+# ---------------------------------------------------------
+
 CUSTOM_CSS = """
 :root {
     --primary: #6d5dfc;
@@ -173,7 +275,12 @@ CUSTOM_CSS = """
     padding: 28px 30px;
     border-radius: 24px;
     margin-bottom: 18px;
-    background: linear-gradient(135deg, #17153b 0%, #342a72 55%, #006f86 100%);
+    background: linear-gradient(
+        135deg,
+        #17153b 0%,
+        #342a72 55%,
+        #006f86 100%
+    );
     color: white;
     box-shadow: 0 16px 45px rgba(20, 20, 60, .18);
 }
@@ -215,27 +322,54 @@ button {
 }
 """
 
+
+# ---------------------------------------------------------
+# Gradio Response Function
+# ---------------------------------------------------------
+
 def respond(message, history):
+
     response, intent, confidence = chatbot(message)
+
     return (
         f"{response}\n\n"
         f"**Detected intent:** `{intent}`  \n"
         f"**Confidence:** `{confidence * 100:.1f}%`"
     )
 
-with gr.Blocks(css=CUSTOM_CSS, theme=gr.themes.Soft()) as demo:
+
+# ---------------------------------------------------------
+# Gradio Interface
+# ---------------------------------------------------------
+
+with gr.Blocks(
+    css=CUSTOM_CSS,
+    theme=gr.themes.Soft()
+) as demo:
+
     gr.HTML("""
     <div class="hero">
         <h1>🤖 Intelligent Customer Support</h1>
-        <p>AI-powered assistance for orders, refunds, payments, cancellations and account support.</p>
-        <div class="badge">⚡ DistilBERT + NLP Intent Classification</div>
+
+        <p>
+        AI-powered assistance for orders, refunds, payments,
+        cancellations and account support.
+        </p>
+
+        <div class="badge">
+            ⚡ BERT-Tiny + NLP Intent Classification
+        </div>
     </div>
     """)
 
     chatbot_ui = gr.ChatInterface(
         fn=respond,
         title="",
-        description="Ask a customer-support question below. Try one of the examples to get started.",
+        description=(
+            "Ask a customer-support question below. "
+            "Try one of the examples to get started."
+        ),
+
         examples=[
             "Where is my order?",
             "I want a refund",
@@ -244,22 +378,33 @@ with gr.Blocks(css=CUSTOM_CSS, theme=gr.themes.Soft()) as demo:
             "Can I pay using UPI?",
             "I forgot my password?"
         ],
+
         chatbot=gr.Chatbot(
             height=500,
-            placeholder="Your AI support conversation will appear here..."
-        ),
+            placeholder=(
+                "Your AI support conversation "
+                "will appear here..."
+            )
+        )
     )
 
     gr.HTML("""
     <div class="footer">
-        Built as an AI/NLP project using Python, Transformers, scikit-learn and Gradio.
+        Built as an AI/NLP project using Python,
+        Transformers, scikit-learn and Gradio.
     </div>
     """)
 
-if __name__ == "__main__":
-   import os
 
-demo.launch(
-    server_name="0.0.0.0",
-    server_port=int(os.environ.get("PORT", 7860))
-)
+# ---------------------------------------------------------
+# Start Application
+# ---------------------------------------------------------
+
+if __name__ == "__main__":
+
+    demo.launch(
+        server_name="0.0.0.0",
+        server_port=int(
+            os.environ.get("PORT", 7860)
+        )
+    )
